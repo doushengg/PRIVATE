@@ -59,7 +59,7 @@ local function startMuscleScript()
             equipSpecific("Swift Samurai")
 
             while getgenv().IsAutoFarming do
-                for i = 1, 1500 do
+                for i = 1, 5000 do
                     player.muscleEvent:FireServer("rep")
                 end
                 task.wait()
