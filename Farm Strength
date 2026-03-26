@@ -15,7 +15,7 @@ local function cleanupFrames()
 end
 
 local function rejoin()
-    task.wait(7)
+    task.wait(15)
     TeleportService:Teleport(game.PlaceId, player)
 end
 
