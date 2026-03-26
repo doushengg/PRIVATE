@@ -15,7 +15,7 @@ local function cleanupFrames()
 end
 
 local function rejoin()
-    task.wait(10)
+    task.wait(7)
     TeleportService:Teleport(game.PlaceId, player)
 end
 
@@ -59,7 +59,7 @@ local function startMuscleScript()
             equipSpecific("Swift Samurai")
 
             while getgenv().IsAutoFarming do
-                for i = 1, 800 do
+                for i = 1, 1500 do
                     player.muscleEvent:FireServer("rep")
                 end
                 task.wait()
