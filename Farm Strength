@@ -1,0 +1,122 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local player = Players.LocalPlayer
+
+getgenv().IsAutoFarming = true
+
+local function cleanupFrames()
+    for _, obj in pairs(ReplicatedStorage:GetChildren()) do
+        if obj.Name:match("Frame$") then
+            obj:Destroy()
+        end
+    end
+end
+
+local function rejoin()
+    task.wait(10)
+    TeleportService:Teleport(game.PlaceId, player)
+end
+
+local function startMuscleScript()
+    local JEDA_RESPAWN = 1
+    local currentProcessThread 
+    local autoFarmThread
+
+    local function stopAllProcesses()
+        if currentProcessThread then task.cancel(currentProcessThread) end
+        if autoFarmThread then task.cancel(autoFarmThread) end
+    end
+
+    local function runAutoFarmLoop()
+        if autoFarmThread then task.cancel(autoFarmThread) end 
+        autoFarmThread = task.spawn(function()
+            local unequipAll = function()
+                local folder = player.petsFolder
+                for _, h in pairs(folder:GetChildren()) do
+                    if h:IsA("Folder") then
+                        for _, j in pairs(h:GetChildren()) do
+                            ReplicatedStorage.rEvents.equipPetEvent:FireServer("unequipPet", j)
+                        end
+                    end
+                end
+                task.wait(.1)
+            end
+
+            local equipSpecific = function(name)
+                unequipAll()
+                task.wait(.01)
+                for _, n in pairs(player.petsFolder.Unique:GetChildren()) do
+                    if n.Name == name then
+                        ReplicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", n)
+                    end
+                end
+            end
+
+            unequipAll()
+            task.wait(.1)
+            equipSpecific("Swift Samurai")
+
+            while getgenv().IsAutoFarming do
+                for i = 1, 800 do
+                    player.muscleEvent:FireServer("rep")
+                end
+                task.wait()
+            end
+        end)
+    end
+
+    local function startFullProcess(character)
+        stopAllProcesses()
+        if not getgenv().IsAutoFarming then return end
+
+        currentProcessThread = task.spawn(function()
+            task.wait(JEDA_RESPAWN)
+            
+            local findMachine = function(p)
+                local q = workspace.machinesFolder:FindFirstChild(p)
+                if not q then
+                    for _, s in pairs(workspace:GetChildren()) do
+                        if s:IsA("Folder") and s.Name:find("machines") then
+                            q = s:FindFirstChild(p)
+                            if q then break end
+                        end
+                    end
+                end
+                return q
+            end
+            
+            local pressE = function()
+                VirtualInputManager:SendKeyEvent(true, "E", false, game)
+                task.wait(.1)
+                VirtualInputManager:SendKeyEvent(false, "E", false, game)
+            end
+            
+            local target = findMachine("Jungle Squat")
+            if target and target:FindFirstChild("interactSeat") and character:FindFirstChild("HumanoidRootPart") then
+                for i = 1, 3 do
+                    if not getgenv().IsAutoFarming then break end
+                    character.HumanoidRootPart.CFrame = target.interactSeat.CFrame * CFrame.new(0, 3, 0)
+                    task.wait(.01)
+                    pressE()
+                    task.wait(.1)
+                end
+            end
+
+            runAutoFarmLoop()
+        end)
+    end
+
+    if player.Character then 
+        startFullProcess(player.Character)
+    end
+
+    player.CharacterAdded:Connect(function(newChar)
+        startFullProcess(newChar)
+    end)
+end
+
+cleanupFrames()
+task.spawn(startMuscleScript)
+task.spawn(rejoin)
