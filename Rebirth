@@ -782,3 +782,67 @@ for _, ultimate in ipairs(ultimateSelect) do
         end
     })
 end
+
+local ZorVexAFK = {}
+ZorVexAFK.__index = ZorVexAFK
+
+function ZorVexAFK.new(mainWindow)
+    local self = setmetatable({}, ZorVexAFK)
+    
+    self.Window = mainWindow
+    self.StartTime = tick()
+    
+    -- Inisialisasi UI
+    self.Tab = self.Window:Tab({Title = "AFK Mode", Icon = "clock"})
+    self.Tab:Section({Title = "Status AFK", Icon = "monitor"})
+    
+    self.TimerLabel = self.Tab:Paragraph({Title = "MODE AFK", Desc = "Menghitung waktu..."})
+    
+    -- Jalankan logika
+    self:InitAntiAFK()
+    self:StartTimer()
+    
+    return self
+end
+
+function ZorVexAFK:InitAntiAFK()
+    local player = game:GetService("Players").LocalPlayer
+    
+    -- Mematikan koneksi idle bawaan jika exploit mendukung getconnections
+    pcall(function() 
+        if getconnections then 
+            for _, v in pairs(getconnections(player.Idled)) do 
+                if v.Disable then v:Disable() elseif v.Disconnect then v:Disconnect() end 
+            end 
+        end 
+    end)
+    
+    -- Simulasi input agar tidak dianggap idle oleh server
+    player.Idled:Connect(function() 
+        game:GetService("VirtualUser"):CaptureController()
+        game:GetService("VirtualUser"):ClickButton2(Vector2.new()) 
+    end)
+end
+
+function ZorVexAFK:StartTimer()
+    task.spawn(function() 
+        while true do 
+            local elapsed = tick() - self.StartTime
+            local h = math.floor(elapsed / 3600)
+            local m = math.floor((elapsed % 3600) / 60)
+            local s = math.floor(elapsed % 60)
+            
+            local timeStr = string.format("%02d:%02d:%02d", h, m, s)
+            
+            pcall(function()
+                self.TimerLabel:SetTitle('<font size="28"><b>MODE AFK ACTIVE</b></font>')
+                self.TimerLabel:SetDesc('<font size="18"><b>AFK TIME: ' .. timeStr .. '</b></font>')
+            end)
+            
+            task.wait(1)
+        end 
+    end) 
+end
+
+-- Inisialisasi
+local AFKSystem = ZorVexAFK.new(Window)
