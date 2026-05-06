@@ -1,0 +1,810 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local c = Players.LocalPlayer
+local displayName = c.DisplayName
+local startTime = os.time()
+local startRebirths = c.leaderstats.Rebirths.Value
+local petsFolder = c:WaitForChild("petsFolder")
+local rEvents = ReplicatedStorage:WaitForChild("rEvents")
+local tradingEvent = rEvents:WaitForChild("tradingEvent")
+
+local TargetStrength = 0
+local selectedPetName = ""
+local selectedPlayer = nil
+local autoTradeToSelected = false
+local autoTradeToAll = false
+local PET_COUNT = 6
+
+local function parseInput(text)
+    local result = text:lower():gsub(",", "")
+    local multiplier = 1
+    
+    if result:find("k") then 
+        multiplier = 1000
+    elseif result:find("m") then 
+        multiplier = 1000000
+    elseif result:find("b") then 
+        multiplier = 1000000000
+    elseif result:find("t") then 
+        multiplier = 1000000000000 
+    end
+    
+    local num = tonumber(result:match("[%d%.]+"))
+    return num and (num * multiplier) or 0
+end
+
+WindUI:AddTheme({
+    Name        = "Light",
+    Accent      = "#f4f4f5",
+    Dialog      = "#f4f4f5",
+    Outline     = "#000000", 
+    Text        = "#000000",
+    Placeholder = "#666666",
+    Background  = "#f0f0f0",
+    Button      = "#000000",
+    Icon        = "#000000",
+})
+
+WindUI:SetNotificationLower(true)
+
+local themes = {"Light"}
+local currentThemeIndex = 1
+
+if not getgenv().TransparencyEnabled then
+    getgenv().TransparencyEnabled = true
+end
+
+local Window = WindUI:CreateWindow({
+    Title = "<b><font size='26'> V̬uz͠o̵ Zilu͢x</font></b>", 
+    Icon = "rbxassetid://106459030518724", 
+    Author = "            By ZorVex",
+    Folder = "Vz Hub",
+    Size = UDim2.fromOffset(500, 350),
+    Transparent = getgenv().TransparencyEnabled,
+    Theme = "Light",
+    Resizable = true,
+    SideBarWidth = 150,
+    BackgroundImageTransparency = 0.8,
+    HideSearchBar = true,
+    ScrollBarEnabled = true,
+    User = {
+        Enabled = true,
+        Anonymous = false,
+        Callback = function()
+            currentThemeIndex = currentThemeIndex + 1
+            if currentThemeIndex > #themes then
+                currentThemeIndex = 1
+            end
+            local newTheme = themes[currentThemeIndex]
+            WindUI:SetTheme(newTheme)
+            WindUI:Notify({
+                Title = "ZorVex | Leader Of Vuzo Zilux",
+                Duration = 8
+            })
+        end,
+    },
+})
+
+Window:SetIconSize(60)
+Window:EditOpenButton({ Enabled = false })
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UIBUTTON"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.IgnoreGuiInset = true 
+
+local ImgBtn = Instance.new("ImageButton")
+ImgBtn.Parent = ScreenGui
+ImgBtn.Size = UDim2.new(0, 90, 0, 90)
+ImgBtn.AnchorPoint = Vector2.new(1, 0) 
+ImgBtn.Position = UDim2.new(0.9, -20, 0, 50) 
+ImgBtn.BackgroundTransparency = 1
+ImgBtn.Image = "rbxassetid://106459030518724" 
+ImgBtn.ZIndex = 9999
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 15)
+UICorner.Parent = ImgBtn
+
+ImgBtn.MouseButton1Click:Connect(function()
+    local shrink = TweenService:Create(ImgBtn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 70, 0, 70)
+    })
+    local grow = TweenService:Create(ImgBtn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 90, 0, 90)
+    })
+    shrink:Play()
+    shrink.Completed:Wait()
+    grow:Play()
+    Window:Toggle()
+end)
+
+local dragging, dragInput, dragStart, startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    ImgBtn.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+ImgBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = ImgBtn.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ImgBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+Window:Tag({
+    Title = "<font size='20'>  VIP  </font>", 
+    Color = Color3.fromHex("#000000")
+})
+
+getgenv().autoFarm = false
+
+local currentCategory = "Ghost Rock"
+local selectedEmoteName = nil
+local animPlayedConn = nil
+
+local toggleStates = {}
+local rockCache = {}
+local RockToggles = {}
+
+local rockCategories = {
+    ["Ghost Rock"] = {
+        {"Ghost Jungle", 10000000},
+        {"Ghost Muscle King", 5000000},
+        {"Ghost Legend", 1000000},
+        {"Ghost Eternal", 750000},
+        {"Ghost Mythical", 400000},
+        {"Ghost Frozen", 150000},
+        {"Ghost Golden", 5000},
+        {"Ghost Starter", 100},
+        {"Ghost Tiny", 0}
+    },
+    ["Teleport Rock"] = {
+        {"Teleport Jungle", 10000000, CFrame.new(-7666.7, 6.8, 2831.0, -0.69, 0, -0.72, 0, 1, 0, 0.72, 0, -0.69)},
+        {"Teleport Muscle King", 5000000, CFrame.new(-9039.3, 9.2, -6051.5, 0.31, 0, -0.94, 0, 1, 0, 0.94, 0, 0.31)},
+        {"Teleport Legend", 1000000, CFrame.new(4146.9, 991.5, -4030.8, 0.98, 0, 0.16, 0, 1, 0, -0.16, 0, 0.98)},
+        {"Teleport Eternal", 750000, CFrame.new(-7289.6, 7.6, -1290.4, -0.60, 0, -0.79, 0, 1, 0, 0.79, 0, -0.60)},
+        {"Teleport Mythical", 400000, CFrame.new(2181.2, 7.3, 1207.8, -0.99, 0, -0.13, 0, 1, 0, 0.13, 0, -0.99)},
+        {"Teleport Frozen", 150000, CFrame.new(-2520.7, 7.9, -218.4, 0.51, 0, 0.85, 0, 1, 0, -0.85, 0, 0.51)},
+        {"Teleport Golden", 5000, CFrame.new(302.0, 7.3, -622.9, -0.94, 0, -0.33, 0, 1, 0, 0.33, 0, -0.94)},
+        {"Teleport Starter", 100, CFrame.new(158.0, 7.3, -164.0, -0.80, 0, -0.59, 0, 1, 0, 0.59, 0, -0.80)},
+        {"Teleport Tiny", 0, CFrame.new(8.4, 4.3, 2101.2, -0.27, 0, -0.96, 0, 1, 0, 0.96, 0, -0.27)}
+    },
+    ["Emote Rock"] = {
+        {"Emote Jungle", 10000000},
+        {"Emote Muscle King", 5000000},
+        {"Emote Legend", 1000000},
+        {"Emote Eternal", 750000},
+        {"Emote Mythical", 400000},
+        {"Emote Frozen", 150000},
+        {"Emote Golden", 5000},
+        {"Emote Starter", 100},
+        {"Emote Tiny", 0}
+    }
+}
+
+local emoteList = {
+    ["God V1"] = 106493972274585,
+    ["Fly Mode"] = 106493972274585,
+    ["Style Arena"] = 126681258672147,
+    ["BlockyKick Dance"] = 97629500912487,
+    ["God V2"] = 81359407734079,
+    ["Style Human"] = 117648669357990,
+    ["Boxing"] = 115203580644128
+}
+
+local blockedAnimations = {
+    ["rbxassetid://3638729053"] = true,
+    ["rbxassetid://3638767427"] = true
+}
+
+local function RefreshRockButtons()
+    local locations = rockCategories[currentCategory]
+    if not locations then return end
+    
+    for i = 1, 9 do
+        if locations[i] and RockToggles[i] then
+            RockToggles[i]:SetTitle(locations[i][1])
+        end
+    end
+end
+
+local function cacheRocks()
+    rockCache = {}
+    local folder = workspace:FindFirstChild("machinesFolder")
+    if not folder then return end
+    
+    for _, obj in pairs(folder:GetDescendants()) do
+        if obj.Name == "neededDurability" and obj.ClassName == "IntValue" then
+            local rock = obj.Parent:FindFirstChild("Rock")
+            if rock then
+                rockCache[obj.Value] = rock
+            end
+        end
+    end
+end
+
+local function applyAgressiveStop()
+    local character = c.Character
+    local humanoid = character and character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    for _, track in pairs(humanoid:GetPlayingAnimationTracks()) do
+        local id = track.Animation and track.Animation.AnimationId
+        local name = track.Name:lower()
+        if id and (blockedAnimations[id] or name:match("punch") or name:match("attack")) then
+            track:Stop()
+        end
+    end
+    
+    if not animPlayedConn then
+        animPlayedConn = humanoid.AnimationPlayed:Connect(function(track)
+            local id = track.Animation and track.Animation.AnimationId
+            local name = track.Name:lower()
+            if id and (blockedAnimations[id] or name:match("punch") or name:match("attack")) then
+                track:Stop()
+            end
+        end)
+    end
+end
+
+local function playEmote()
+    local character = c.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local description = humanoid and humanoid:FindFirstChildOfClass("HumanoidDescription")
+    
+    if description and selectedEmoteName then
+        description:SetEmotes({[selectedEmoteName] = {emoteList[selectedEmoteName]}})
+        pcall(function()
+            humanoid:PlayEmote(selectedEmoteName)
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            if animator then
+                for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+                    track.Priority = Enum.AnimationPriority.Action4
+                    track.Looped = true
+                end
+            end
+        end)
+    end
+end
+
+local function useTool()
+    local character = c.Character
+    local humanoid = character and character:FindFirstChild("Humanoid")
+    local backpack = c:FindFirstChild("Backpack")
+    local punch = (backpack and backpack:FindFirstChild("Punch")) or (character and character:FindFirstChild("Punch"))
+    
+    if humanoid and punch then
+        if punch.Parent == backpack then
+            humanoid:EquipTool(punch)
+        end
+        if punch:FindFirstChild("attackTime") then
+            punch.attackTime.Value = 0
+        end
+        punch:Activate()
+    end
+    
+    local event = c:FindFirstChild("muscleEvent")
+    if event then
+        event:FireServer("punch", "leftHand")
+        event:FireServer("punch", "rightHand")
+    end
+end
+
+local farmTab = Window:Tab({Title = "Rock Type", Icon = "shield-check"})
+farmTab:Section({Title = "Rock Farm", Icon = "list"})
+
+farmTab:Dropdown({
+    Title = "Change Farm Mode",
+    Desc = "Select Mode for Farming Rock",
+    Values = {"Ghost Rock", "Teleport Rock", "Emote Rock"},
+    Callback = function(v)
+        currentCategory = v
+        RefreshRockButtons()
+    end
+})
+
+farmTab:Dropdown({
+    Title = "Select Emote",
+    Desc = "Select Emote To Work Rock Emote",
+    Values = {"God V1", "Fly Mode", "Style Arena", "BlockyKick Dance", "God V2", "Style Human", "Boxing"},
+    Callback = function(v)
+        selectedEmoteName = v
+    end
+})
+
+local zoomAmount, zoomActive = 10000, false
+
+farmTab:Input({
+    Title = "Zoom Distance", 
+    Desc = "Enter The Viewing Distance You Want", 
+    Default = "10000", 
+    Numeric = true, 
+    Callback = function(t) 
+        local player = game:GetService("Players").LocalPlayer
+        zoomAmount = tonumber(t) or 10000
+        if zoomActive then player.CameraMaxZoomDistance = zoomAmount end 
+    end
+})
+
+farmTab:Toggle({
+    Title = "Enable Costume Zoom", 
+    Desc = "The Field Of View Can Be Very Wide", 
+    Default = false, 
+    Callback = function(v) 
+        local player = game:GetService("Players").LocalPlayer
+        local camera = workspace.CurrentCamera
+        zoomActive = v
+        if v then 
+            player.CameraMaxZoomDistance = zoomAmount
+            camera.FieldOfView = 90 
+        else 
+            player.CameraMaxZoomDistance = 128
+            camera.FieldOfView = 70 
+        end 
+    end
+})
+
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local hb = nil
+local lockCustomPos = false
+local antiKbEnabled = false
+local renderConnection = nil
+local screenGui = nil
+
+local function ApplyAntiKb(state)
+    if hb then hb:Disconnect() hb = nil end
+    
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart", 5)
+    local hum = char:WaitForChild("Humanoid", 5)
+    
+    if not hrp or not hum then return end
+    
+    if state then
+        if hrp:FindFirstChild("AntiKbBV") then hrp.AntiKbBV:Destroy() end
+        if hrp:FindFirstChild("AntiKbBG") then hrp.AntiKbBG:Destroy() end
+        
+        local bv = Instance.new("BodyVelocity")
+        local bg = Instance.new("BodyGyro")
+        
+        bv.Name, bg.Name = "AntiKbBV", "AntiKbBG"
+        bv.Parent, bg.Parent = hrp, hrp
+        
+        bg.P = 10000
+        bg.MaxTorque = Vector3.new(1e7, 1e7, 1e7)
+        
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        
+        hb = RunService.Heartbeat:Connect(function()
+            if not hrp.Parent or not hum.Parent then hb:Disconnect() return end
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                bv.MaxForce = Vector3.new(0, 0, 0)
+                bg.CFrame = bg.CFrame:Lerp(CFrame.new(hrp.Position, hrp.Position + moveDir), 0.1)
+            else
+                bv.MaxForce = Vector3.new(1e7, 0, 1e7)
+                bv.Velocity = Vector3.new(0, 0, 0)
+                bg.CFrame = bg.CFrame:Lerp(CFrame.new(hrp.Position, hrp.Position + hrp.CFrame.LookVector), 0.1)
+            end
+        end)
+    else
+        if hrp:FindFirstChild("AntiKbBV") then hrp.AntiKbBV:Destroy() end
+        if hrp:FindFirstChild("AntiKbBG") then hrp.AntiKbBG:Destroy() end
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+    end
+end
+
+local AntiKb = farmTab:Toggle({
+    Title = "Anti Knockback",
+    Desc = "Never Bounce",
+    Value = true,
+    Callback = function(state)
+        antiKbEnabled = state
+        ApplyAntiKb(state)
+    end
+})
+
+player.CharacterAdded:Connect(function() 
+    if antiKbEnabled then 
+        task.wait(0.5) 
+        ApplyAntiKb(true) 
+    end 
+end)
+
+pcall(function() AntiKb:Set(true) end)
+
+farmTab:Section({Title = "Auto Rocks", Icon = "mountain"})
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local muscleEvent = player:WaitForChild("muscleEvent")
+
+local rocks = {
+    {"Jungle Rock", 10000000}, 
+    {"Muscle King Rock", 5000000}, 
+    {"Legend Rock", 1000000}, 
+    {"Eternal Rock", 750000}, 
+    {"Mythical Rock", 400000}, 
+    {"Frozen Rock", 150000}, 
+    {"Golden Rock", 5000}, 
+    {"Starter Rock", 100}, 
+    {"Tiny Rock", 0}
+}
+
+local TeleportTab    = Window:Tab({Title = "Teleport", Icon = "map-pin"})
+local CustomSection  = TeleportTab:Section({Title = "Teleport Custom", Icon = "user-cog"})
+
+local CustomPosInput = "0, 0, 0"
+local LockCustomPos  = false
+
+TeleportTab:Input({
+    Title       = "Target Position", 
+    Desc        = "You Are Free To Teleport Anywhere", 
+    Placeholder = "Enter Costume Position",
+    Callback    = function(text) 
+        CustomPosInput = text 
+    end
+})
+
+TeleportTab:Button({
+    Title    = "Get Your Position", 
+    Desc     = "Copy Your Position",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        
+        if root then
+            local pos = root.Position
+            local formattedPos = string.format("%.2f, %.2f, %.2f", pos.X, pos.Y, pos.Z)
+            setclipboard(formattedPos)
+            
+            if WindUI then 
+                WindUI:Notify({
+                    Title    = "Position Done Copy", 
+                    Content  = "You Have Copy The Position", 
+                    Duration = 1, 
+                    Icon     = "clipboard-check"
+                }) 
+            end
+        end
+    end
+})
+
+TeleportTab:Toggle({
+    Title    = "Teleport Your Position", 
+    Value    = false,
+    Callback = function(state)
+        LockCustomPos = state
+        if state then
+            task.spawn(function()
+                while LockCustomPos do
+                    local coords = {}
+                    for val in string.gmatch(CustomPosInput, "[^,]+") do 
+                        table.insert(coords, tonumber(val)) 
+                    end
+                    
+                    if #coords >= 3 then
+                        local character = game.Players.LocalPlayer.Character
+                        local root = character and character:FindFirstChild("HumanoidRootPart")
+                        if root then 
+                            root.CFrame = CFrame.new(coords[1], coords[2], coords[3]) 
+                        end
+                    end
+                    task.wait(0.005)
+                end
+            end)
+        end
+    end
+})
+
+local TeleportSection = TeleportTab:Section({Title = "Teleport Mode", Icon = "map-pin"})
+
+local CurrentVersion = "Portal Teleport"
+local ToggleStates   = {}
+local ActiveLoops    = {}
+
+local TeleportData   = {
+    ["Portal Teleport"] = {
+        {"Spawn", CFrame.new(2, 8, 115)}, {"Secret Area", CFrame.new(1947, 2, 6191)}, {"Tiny Island", CFrame.new(-34, 7, 1903)}, 
+        {"Frozen", CFrame.new(-2600, 3, -403)}, {"Mythical", CFrame.new(2255, 7, 1071)}, {"Inferno", CFrame.new(-6768, 7, -1287)}, 
+        {"Legend", CFrame.new(4604, 991, -3887)}, {"Muscle King", CFrame.new(-8646, 17, -5738)}, {"Jungle", CFrame.new(-8659, 6, 2384)}
+    },
+    ["Area Spawn"] = {
+        {"Area Spawn V1", CFrame.new(-288.63, 34.37, -1242.75)}, {"Area Spawn V2", CFrame.new(198.11, 43.87, -1281.25)}, {"Area Spawn V3", CFrame.new(753.85, 37.22, -953.21)}, 
+        {"Area Spawn V4", CFrame.new(867.29, 36.51, -153.79)}, {"Area Spawn V5", CFrame.new(911.35, 41.67, 328.53)}, {"Area Spawn V6", CFrame.new(176.71, 34.37, 678.06)}, 
+        {"Area Spawn V7", CFrame.new(-278.76, 41.67, 803.21)}, {"Area Spawn V8", CFrame.new(-820.03, 34.37, 323.52)}, {"Area Spawn V9", CFrame.new(-864.29, 41.67, -148.20)}
+    },
+    ["Area Frost"] = {
+        {"Frost V1", CFrame.new(-3632.78, 41.67, -611.01)}, {"Frost V2", CFrame.new(-3018.51, 34.37, -1133.93)}, {"Frost V3", CFrame.new(-2540.17, 41.67, -1139.82)}, 
+        {"Frost V4", CFrame.new(-2076.97, 34.37, -572.28)}, {"Frost V5", CFrame.new(-2030.41, 41.67, -99.55)}, {"Frost V6", CFrame.new(-2549.26, 34.37, 314.38)}, 
+        {"Frost V7", CFrame.new(-3024.51, 41.67, 322.30)}, {"Frost V8", CFrame.new(-3666.25, 34.37, -136.61)}, {"Frost V9", CFrame.new(-2846.15, 89.44, -406.46)}
+    },
+    ["Area Mythical"] = {
+        {"Mythical V1", CFrame.new(1611.91, 41.67, 831.43)}, {"Mythical V2", CFrame.new(2231.55, 34.37, 307.55)}, {"Mythical V3", CFrame.new(2702.26, 41.67, 299.23)}, 
+        {"Mythical V4", CFrame.new(3168.63, 34.37, 869.02)}, {"Mythical V5", CFrame.new(3216.70, 41.67, 1340.99)}, {"Mythical V6", CFrame.new(2697.76, 34.37, 1756.94)}, 
+        {"Mythical V7", CFrame.new(2219.95, 41.67, 1765.28)}, {"Mythical V8", CFrame.new(1580.94, 34.37, 1304.18)}, {"Mythical V9", CFrame.new(1613.45, 41.67, 834.61)}
+    },
+    ["Area Inferno"] = {
+        {"Inferno V1", CFrame.new(-6171.77, 41.67, -980.01)}, {"Inferno V2", CFrame.new(-6694.84, 34.37, -564.37)}, {"Inferno V3", CFrame.new(-7168.48, 41.67, -555.94)}, 
+        {"Inferno V4", CFrame.new(-7808.35, 34.37, -998.05)}, {"Inferno V5", CFrame.new(-7775.84, 41.67, -1485.05)}, {"Inferno V6", CFrame.new(-7158.84, 34.37, -2013.57)}, 
+        {"Inferno V7", CFrame.new(-6685.91, 41.67, -2022.32)}, {"Inferno V8", CFrame.new(-6223.72, 34.37, -1448.29)}, {"Inferno V9", CFrame.new(-6986.32, 89.65, -1287.44)}
+    },
+    ["Area Jungle"] = {
+        {"jungle V1", CFrame.new(-7429.39, 137.64, 3539.27)}, {"jungle V2", CFrame.new(-7111.83, 137.06, 3076.58)}, {"jungle V3", CFrame.new(-7055.04, 102.05, 2162.77)}, 
+        {"jungle V4", CFrame.new(-7733.45, 55.73, 1369.46)}, {"jungle V5", CFrame.new(-8480.99, 134.16, 1414.67)}, {"jungle V6", CFrame.new(-9138.68, 149.24, 1827.94)}, 
+        {"jungle V7", CFrame.new(-9430.28, 53.89, 2438.14)}, {"jungle V8", CFrame.new(-8183.44, 76.41, 1383.64)}, {"jungle V9", CFrame.new(-8116.44, 223.95, 2397.24)}
+    },
+    ["Void Brawl"] = {
+        {"Void Brawl V1", CFrame.new(3674.49, 36.89, -8295.16)}, {"Void Brawl V2", CFrame.new(3493.97, 43.50, -9086.34)}, {"Void Brawl V3", CFrame.new(3738.08, 44.34, -9585.31)}, 
+        {"Void Brawl V4", CFrame.new(4338.64, 34.36, -9808.24)}, {"Void Brawl V5", CFrame.new(4930.11, 41.82, -9722.39)}, {"Void Brawl V6", CFrame.new(5391.56, 34.33, -9308.55)}, 
+        {"Void Brawl V7", CFrame.new(5442.33, 41.82, -8625.02)}, {"Void Brawl V8", CFrame.new(5197.84, 41.72, -8176.37)}, {"Void Brawl V9", CFrame.new(4725.28, 37.66, -7899.020)}
+    },
+    ["Desert Brawl"] = {
+        {"Desert Brawl V1", CFrame.new(1931.75, 40.69, -7161.35)}, {"Desert Brawl V2", CFrame.new(1684.34, 36.89, -6721.88)}, {"Desert Brawl V3", CFrame.new(1219.53, 33.80, -6438.87)}, 
+        {"Desert Brawl V4", CFrame.new(720.85, 41.19, -6453.78)}, {"Desert Brawl V5", CFrame.new(164.57, 36.33, -6832.94)}, {"Desert Brawl V6", CFrame.new(-20.00, 42.37, -7631.01)}, 
+        {"Desert Brawl V7", CFrame.new(232.82, 43.22, -8137.93)}, {"Desert Brawl V8", CFrame.new(819.16, 35.41, -8351.83)}, {"Desert Brawl V9", CFrame.new(1420.26, 39.57, -8256.59)}
+    },
+    ["Ori Brawl"] = {
+        {"Ori Brawl V1", CFrame.new(-1139.72, 40.46, -5530.67)}, {"Ori Brawl V2", CFrame.new(-1606.91, 31.70, -5256.56)}, {"Ori Brawl V3", CFrame.new(-2098.54, 45.80, -5250.18)}, 
+        {"Ori Brawl V4", CFrame.new(-2655.81, 32.86, -5641.19)}, {"Ori Brawl V5", CFrame.new(-2826.76, 40.16, -6442.06)}, {"Ori Brawl V6", CFrame.new(-2599.99, 40.03, -6931.56)}, 
+        {"Ori Brawl V7", CFrame.new(-1389.05, 38.73, -7072.45)}, {"Ori Brawl V8", CFrame.new(-940.97, 36.17, -6660.76)}, {"Ori Brawl V9", CFrame.new(-1403.06, 39.54, -7063.23)}
+    }
+}
+
+local function SafeTeleport(cframe)
+    local player    = game.Players.LocalPlayer
+    local character = player.Character
+    local root      = character and character:FindFirstChild("HumanoidRootPart")
+    
+    if root then 
+        root.CFrame = cframe 
+    end
+end
+
+TeleportTab:Dropdown({
+    Title    = "Change Teleport Version", 
+    Values   = {"Portal Teleport", "Area Spawn", "Area Frost", "Area Mythical", "Area Inferno", "Area Jungle", "Void Brawl", "Desert Brawl", "Ori Brawl"},
+    Callback = function(v) 
+        CurrentVersion = v 
+        RefreshButtons() 
+    end
+})
+
+local ButtonSection    = TeleportTab:Section({Title = "Teleport", Icon = "list"})
+local TeleportToggles  = {}
+
+local ZorVexAFK = {}
+ZorVexAFK.__index = ZorVexAFK
+
+function ZorVexAFK.new(mainWindow)
+    local self = setmetatable({}, ZorVexAFK)
+    
+    self.Window = mainWindow
+    self.StartTime = tick()
+    
+    -- Inisialisasi UI
+    self.Tab = self.Window:Tab({Title = "AFK Mode", Icon = "clock"})
+    self.Tab:Section({Title = "Status AFK", Icon = "monitor"})
+    
+    self.TimerLabel = self.Tab:Paragraph({Title = "MODE AFK", Desc = "Menghitung waktu..."})
+    
+    -- Jalankan logika
+    self:InitAntiAFK()
+    self:StartTimer()
+    
+    return self
+end
+
+function ZorVexAFK:InitAntiAFK()
+    local player = game:GetService("Players").LocalPlayer
+    
+    -- Mematikan koneksi idle bawaan jika exploit mendukung getconnections
+    pcall(function() 
+        if getconnections then 
+            for _, v in pairs(getconnections(player.Idled)) do 
+                if v.Disable then v:Disable() elseif v.Disconnect then v:Disconnect() end 
+            end 
+        end 
+    end)
+    
+    -- Simulasi input agar tidak dianggap idle oleh server
+    player.Idled:Connect(function() 
+        game:GetService("VirtualUser"):CaptureController()
+        game:GetService("VirtualUser"):ClickButton2(Vector2.new()) 
+    end)
+end
+
+function ZorVexAFK:StartTimer()
+    task.spawn(function() 
+        while true do 
+            local elapsed = tick() - self.StartTime
+            local h = math.floor(elapsed / 3600)
+            local m = math.floor((elapsed % 3600) / 60)
+            local s = math.floor(elapsed % 60)
+            
+            local timeStr = string.format("%02d:%02d:%02d", h, m, s)
+            
+            pcall(function()
+                self.TimerLabel:SetTitle('<font size="28"><b>MODE AFK ACTIVE</b></font>')
+                self.TimerLabel:SetDesc('<font size="18"><b>AFK TIME: ' .. timeStr .. '</b></font>')
+            end)
+            
+            task.wait(1)
+        end 
+    end) 
+end
+
+-- Inisialisasi
+local AFKSystem = ZorVexAFK.new(Window)
+
+for i = 1, 9 do
+    ToggleStates[i] = false
+    TeleportToggles[i] = TeleportTab:Toggle({
+        Title    = "Select Version Teleport", 
+        Desc     = "Teleport Detail Mode", 
+        Value    = false,
+        Callback = function(state)
+            ToggleStates[i] = state
+            if state then
+                task.spawn(function()
+                    while ToggleStates[i] do
+                        local data = TeleportData[CurrentVersion][i]
+                        if data then 
+                            SafeTeleport(data[2]) 
+                        end
+                        task.wait(0.005)
+                    end
+                end)
+            end
+        end
+    })
+end
+
+function RefreshButtons()
+    local locations = TeleportData[CurrentVersion]
+    if not locations then return end
+
+    for i = 1, 9 do 
+        if locations[i] and TeleportToggles[i] then 
+            TeleportToggles[i]:SetTitle(locations[i][1]) 
+        end 
+    end
+end
+
+RefreshButtons()
+
+for i = 1, 9 do
+    toggleStates[i] = false
+    RockToggles[i] = farmTab:Toggle({
+        Title = "Select Rock",
+        Desc = "Farming Rock Detail Mode",
+        Callback = function(state)
+            -- Validasi: Jika pilih Emote Rock tapi belum pilih Emote
+            if state and currentCategory == "Emote Rock" and not selectedEmoteName then
+                -- Kita gunakan pcall agar jika 'Set' atau 'SetValue' gagal, script tidak crash
+                pcall(function()
+                    -- Coba gunakan :Set(false) jika :SetValue(false) error
+                    if RockToggles[i].SetValue then
+                        RockToggles[i]:SetValue(false)
+                    elseif RockToggles[i].Set then
+                        RockToggles[i]:Set(false)
+                    end
+                end)
+
+                if WindUI then
+                    WindUI:Notify({
+                        Title = "Peringatan",
+                        Content = "Silahkan pilih Emote terlebih dahulu!",
+                        Duration = 3,
+                        Icon = "alert-circle"
+                    })
+                end
+                return
+            end
+            
+            toggleStates[i] = state
+            
+            if state then
+                task.spawn(function()
+                    cacheRocks()
+                    if currentCategory == "Emote Rock" then
+                        applyAgressiveStop()
+                        playEmote()
+                        task.wait(0.5)
+                    end
+                    
+                    while toggleStates[i] do
+                        -- Safety check jika emote tiba-tiba hilang/reset
+                        if currentCategory == "Emote Rock" and not selectedEmoteName then
+                            toggleStates[i] = false
+                            pcall(function()
+                                if RockToggles[i].SetValue then RockToggles[i]:SetValue(false)
+                                elseif RockToggles[i].Set then RockToggles[i]:Set(false) end
+                            end)
+                            break
+                        end
+
+                        local data = rockCategories[currentCategory][i]
+                        local character = c.Character
+                        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                        local dur = c:FindFirstChild("Durability")
+                        
+                        if currentCategory == "Emote Rock" then
+                            applyAgressiveStop()
+                        end
+                        
+                        if data and hrp and dur and dur.Value >= data[2] then
+                            local targetRock = rockCache[data[2]]
+                            
+                            if currentCategory == "Teleport Rock" and data[3] then
+                                hrp.CFrame = data[3]
+                                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            end
+                            
+                            if targetRock then
+                                for _, handName in ipairs({"LeftHand", "RightHand"}) do
+                                    local hand = character:FindFirstChild(handName)
+                                    if hand then
+                                        firetouchinterest(targetRock, hand, 0)
+                                        firetouchinterest(targetRock, hand, 1)
+                                    end
+                                end
+                                useTool()
+                            end
+                        end
+                        task.wait(0.0001)
+                    end
+                end)
+            else
+                if animPlayedConn then
+                    animPlayedConn:Disconnect()
+                    animPlayedConn = nil
+                end
+                local punch = c.Backpack:FindFirstChild("Punch") or (c.Character and c.Character:FindFirstChild("Punch"))
+                if punch and punch:FindFirstChild("attackTime") then
+                    punch.attackTime.Value = 0.35
+                end
+            end
+        end
+    })
+end
