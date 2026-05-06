@@ -1,0 +1,784 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local c = Players.LocalPlayer
+local displayName = c.DisplayName
+local startTime = os.time()
+local startRebirths = c.leaderstats.Rebirths.Value
+local petsFolder = c:WaitForChild("petsFolder")
+local rEvents = ReplicatedStorage:WaitForChild("rEvents")
+local tradingEvent = rEvents:WaitForChild("tradingEvent")
+
+local TargetStrength = 0
+local selectedPetName = ""
+local selectedPlayer = nil
+local autoTradeToSelected = false
+local autoTradeToAll = false
+local PET_COUNT = 6
+
+local function parseInput(text)
+    local result = text:lower():gsub(",", "")
+    local multiplier = 1
+    
+    if result:find("k") then 
+        multiplier = 1000
+    elseif result:find("m") then 
+        multiplier = 1000000
+    elseif result:find("b") then 
+        multiplier = 1000000000
+    elseif result:find("t") then 
+        multiplier = 1000000000000 
+    end
+    
+    local num = tonumber(result:match("[%d%.]+"))
+    return num and (num * multiplier) or 0
+end
+
+WindUI:AddTheme({
+    Name        = "Light",
+    Accent      = "#f4f4f5",
+    Dialog      = "#f4f4f5",
+    Outline     = "#000000", 
+    Text        = "#000000",
+    Placeholder = "#666666",
+    Background  = "#f0f0f0",
+    Button      = "#000000",
+    Icon        = "#000000",
+})
+
+WindUI:SetNotificationLower(true)
+
+local themes = {"Light"}
+local currentThemeIndex = 1
+
+if not getgenv().TransparencyEnabled then
+    getgenv().TransparencyEnabled = true
+end
+
+local Window = WindUI:CreateWindow({
+    Title = "<b><font size='26'> V̬uz͠o̵ Zilu͢x</font></b>", 
+    Icon = "rbxassetid://106459030518724", 
+    Author = "              By ZorVex",
+    Folder = "Vz Hub",
+    Size = UDim2.fromOffset(500, 350),
+    Transparent = getgenv().TransparencyEnabled,
+    Theme = "Light",
+    Resizable = true,
+    SideBarWidth = 150,
+    BackgroundImageTransparency = 0.8,
+    HideSearchBar = true,
+    ScrollBarEnabled = true,
+    User = {
+        Enabled = true,
+        Anonymous = false,
+        Callback = function()
+            currentThemeIndex = currentThemeIndex + 1
+            if currentThemeIndex > #themes then
+                currentThemeIndex = 1
+            end
+            local newTheme = themes[currentThemeIndex]
+            WindUI:SetTheme(newTheme)
+            WindUI:Notify({
+                Title = "ZorVex | Leader Of Vuzo Zilux",
+                Duration = 8
+            })
+        end,
+    },
+})
+
+Window:SetIconSize(60)
+Window:EditOpenButton({ Enabled = false })
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "UIBUTTON"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.IgnoreGuiInset = true 
+
+local ImgBtn = Instance.new("ImageButton")
+ImgBtn.Parent = ScreenGui
+ImgBtn.Size = UDim2.new(0, 90, 0, 90)
+ImgBtn.AnchorPoint = Vector2.new(1, 0) 
+ImgBtn.Position = UDim2.new(0.9, -20, 0, 50) 
+ImgBtn.BackgroundTransparency = 1
+ImgBtn.Image = "rbxassetid://106459030518724" 
+ImgBtn.ZIndex = 9999
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 15)
+UICorner.Parent = ImgBtn
+
+ImgBtn.MouseButton1Click:Connect(function()
+    local shrink = TweenService:Create(ImgBtn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 70, 0, 70)
+    })
+    local grow = TweenService:Create(ImgBtn, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 90, 0, 90)
+    })
+    shrink:Play()
+    shrink.Completed:Wait()
+    grow:Play()
+    Window:Toggle()
+end)
+
+local dragging, dragInput, dragStart, startPos
+
+local function update(input)
+    local delta = input.Position - dragStart
+    ImgBtn.Position = UDim2.new(
+        startPos.X.Scale, startPos.X.Offset + delta.X,
+        startPos.Y.Scale, startPos.Y.Offset + delta.Y
+    )
+end
+
+ImgBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = ImgBtn.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+ImgBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+Window:Tag({
+    Title = "<font size='20'>  VIP  </font>", 
+    Color = Color3.fromHex("#000000")
+})
+
+local rebirthTab = Window:Tab({Title = "Rebirth", Icon = "refresh-cw"})
+
+local glitch_h = rebirthTab:Section({Title = "Fast Rebirth", Icon = "skull"})
+
+rebirthTab:Toggle({
+    Title = "Auto Farm Rebirth",
+    Desc = "Requires 7 Pet Packs to Succes",
+    Callback = function(state)
+        getgenv().IsAutoFarming = state
+        
+        local a = game:GetService("ReplicatedStorage")
+        local b = game:GetService("Players")
+        local c = b.LocalPlayer
+
+        local DURASI_SIZE_TOTAL = 300
+        local SPEED_SIZE = 0.01
+        local DURASI_WEIGHT_TOTAL = 20
+        local SPEED_WEIGHT = 0.1
+        local JEDA_RESPAWN = 3
+
+        local respawnConn
+        local currentProcessThread 
+        local sizeThread
+        local autoFarmThread
+
+        local function stopAllProcesses()
+            if currentProcessThread then task.cancel(currentProcessThread) currentProcessThread = nil end
+            if sizeThread then task.cancel(sizeThread) sizeThread = nil end
+            if autoFarmThread then task.cancel(autoFarmThread) autoFarmThread = nil end
+        end
+
+        local function runAutoFarmLoop()
+            if autoFarmThread then task.cancel(autoFarmThread) end 
+            
+            autoFarmThread = task.spawn(function()
+                local d = function()
+                    local f = c.petsFolder
+                    for g, h in pairs(f:GetChildren()) do
+                        if h:IsA("Folder") then
+                            for i, j in pairs(h:GetChildren()) do
+                                a.rEvents.equipPetEvent:FireServer("unequipPet", j)
+                            end
+                        end
+                    end
+                    task.wait(.1)
+                end
+
+                local k = function(l)
+                    d()
+                    task.wait(.01)
+                    for m, n in pairs(c.petsFolder.Unique:GetChildren()) do
+                        if n.Name == l then
+                            a.rEvents.equipPetEvent:FireServer("equipPet", n)
+                        end
+                    end
+                end
+
+                while getgenv().IsAutoFarming do
+                    local v = c.leaderstats.Rebirths.Value
+                    local w = 10000 + (5000 * v)
+                    if c.ultimatesFolder:FindFirstChild("Golden Rebirth") then
+                        local x = c.ultimatesFolder["Golden Rebirth"].Value
+                        w = math.floor(w * (1 - (x * 0.1)))
+                    end
+                    
+                    d()
+                    task.wait(.1)
+                    k("Swift Samurai")
+                    while c.leaderstats.Strength.Value < w and getgenv().IsAutoFarming do
+                        for y = 1, 15 do
+                            c.muscleEvent:FireServer("rep")
+                        end
+                        task.wait()
+                    end
+                    
+                    if not getgenv().IsAutoFarming then break end
+
+                    d()
+                    task.wait(.1)
+                    k("Tribal Overlord")
+                    local A = c.leaderstats.Rebirths.Value
+                    repeat
+                        a.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                        task.wait(.1)
+                        if not getgenv().IsAutoFarming then break end
+                    until c.leaderstats.Rebirths.Value > A
+                    task.wait()
+                end
+            end)
+        end
+
+        local function startFullProcess(character)
+            stopAllProcesses() 
+            if not getgenv().IsAutoFarming then return end
+
+            sizeThread = task.spawn(function()
+                local startTime = tick()
+                while (tick() - startTime) < DURASI_SIZE_TOTAL and getgenv().IsAutoFarming do
+                    pcall(function() a.rEvents.changeSpeedSizeRemote:InvokeServer("changeSize", 2) end)
+                    task.wait(SPEED_SIZE)
+                end
+            end)
+
+            currentProcessThread = task.spawn(function()
+                task.wait(JEDA_RESPAWN) 
+                
+                local backpack = c:WaitForChild("Backpack")
+                local humanoid = character:WaitForChild("Humanoid")
+                local weightItem = backpack:FindFirstChild("Weight") or character:FindFirstChild("Weight")
+
+                if weightItem and getgenv().IsAutoFarming then
+                    humanoid:EquipTool(weightItem)
+                    local weightStartTime = tick()
+                    while (tick() - weightStartTime) < DURASI_WEIGHT_TOTAL and getgenv().IsAutoFarming do
+                        if not character or not character.Parent then break end
+                        pcall(function() weightItem:Activate() end)
+                        task.wait(SPEED_WEIGHT)
+                    end
+                end
+
+                if not getgenv().IsAutoFarming then return end
+
+                local o = function(p)
+                    local q = workspace.machinesFolder:FindFirstChild(p)
+                    if not q then
+                        for r, s in pairs(workspace:GetChildren()) do
+                            if s:IsA("Folder") and s.Name:find("machines") then
+                                q = s:FindFirstChild(p)
+                                if q then break end
+                            end
+                        end
+                    end
+                    return q
+                end
+                local t = function()
+                    local u = game:GetService("VirtualInputManager")
+                    u:SendKeyEvent(true, "E", false, game)
+                    task.wait(.1)
+                    u:SendKeyEvent(false, "E", false, game)
+                end
+                
+                local z = o("Jungle Bar Lift")
+                if z and z:FindFirstChild("interactSeat") and character:FindFirstChild("HumanoidRootPart") then
+                    for i = 1, 3 do
+                        if not getgenv().IsAutoFarming then break end
+                        character.HumanoidRootPart.CFrame = z.interactSeat.CFrame * CFrame.new(0, 3, 0)
+                        task.wait(.01)
+                        t()
+                        task.wait(.1)
+                    end
+                end
+
+                runAutoFarmLoop()
+            end)
+        end
+
+        if state then
+            if c.Character then 
+                task.spawn(function()
+                    stopAllProcesses() 
+                    
+                    sizeThread = task.spawn(function()
+                        local startTime = tick()
+                        while (tick() - startTime) < DURASI_SIZE_TOTAL and getgenv().IsAutoFarming do
+                            pcall(function() a.rEvents.changeSpeedSizeRemote:InvokeServer("changeSize", 2) end)
+                            task.wait(SPEED_SIZE)
+                        end
+                    end)
+                    
+                    local o = function(p)
+                        local q = workspace.machinesFolder:FindFirstChild(p)
+                        if not q then
+                            for r, s in pairs(workspace:GetChildren()) do
+                                if s:IsA("Folder") and s.Name:find("machines") then q = s:FindFirstChild(p) if q then break end end
+                            end
+                        end
+                        return q
+                    end
+                    local t = function()
+                        local u = game:GetService("VirtualInputManager")
+                        u:SendKeyEvent(true, "E", false, game)
+                        task.wait(.1)
+                        u:SendKeyEvent(false, "E", false, game)
+                    end
+                    
+                    local z = o("Jungle Bar Lift")
+                    if z and z:FindFirstChild("interactSeat") and c.Character:FindFirstChild("HumanoidRootPart") then
+                        for i = 1, 3 do
+                            c.Character.HumanoidRootPart.CFrame = z.interactSeat.CFrame * CFrame.new(0, 3, 0)
+                            task.wait(.01)
+                            t()
+                            task.wait(.1)
+                        end
+                    end
+                    runAutoFarmLoop()
+                end)
+            end
+
+            respawnConn = c.CharacterAdded:Connect(function(newChar)
+                startFullProcess(newChar)
+            end)
+        else
+            stopAllProcesses()
+            if respawnConn then respawnConn:Disconnect() respawnConn = nil end
+        end
+    end
+})
+
+rebirthTab:Button({
+    Title = "Delete Frames",
+    Desc = "It Will Be Very Stable If You Push Rebirth",
+    Callback = function()
+        for _, obj in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
+            if obj.Name:match("Frame$") then
+                obj:Destroy()
+            end
+        end
+        WindUI:Notify({Title = "Success", Content = "Frame Delete 100% Fps Boost"})
+    end
+})
+
+local Farminjgg = rebirthTab:Section({Title = "Rebirth Infinity", Icon = "flame"})
+
+local autoRebirthActive = false
+
+rebirthTab:Toggle({
+    Title = "Auto Rebirth Infinity",
+    Desc = "Take Unlimited Rebirth 24/7",
+    Callback = function(bool)
+        autoRebirthActive = bool
+        if autoRebirthActive then
+            task.spawn(function()
+                while autoRebirthActive do 
+                    game:GetService("ReplicatedStorage").rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                    task.wait(0.1) 
+                end
+            end)
+        end
+    end
+})
+
+local Farmingg = rebirthTab:Section({Title = "Rebirth Target", Icon = "crosshair"})
+
+local rebirthTarget = 0
+local rebirthingToTarget = false
+local sizeValue = 2
+_G.autoSizeActive = false
+
+rebirthTab:Input({
+    Title = "Rebirth Target",
+    Desc = "Enter The Number Of Rebirths You Want To Achieve",
+    Callback = function(text)
+        rebirthTarget = tonumber(text) or 0
+    end
+})
+
+rebirthTab:Toggle({
+    Title = "Auto Rebirth",
+    Desc = "Doing Rebirth Farming Automatic",
+    Callback = function(bool)
+        rebirthingToTarget = bool
+        if bool then
+            task.spawn(function()
+                while rebirthingToTarget do
+                    local leaderstats = c:FindFirstChild("leaderstats")
+                    local rebirths = leaderstats and leaderstats:FindFirstChild("Rebirths")
+
+                    if rebirths and rebirthTarget > 0 and rebirths.Value >= rebirthTarget then
+                        rebirthingToTarget = false
+                        break
+                    end
+
+                    rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+})
+
+rebirthTab:Input({
+    Title = "Set Size",
+    Placeholder = "Size Default 2",
+    Callback = function(text)
+        sizeValue = tonumber(text) or 2
+    end
+})
+
+rebirthTab:Toggle({
+    Title = "Auto Size",
+    Desc = "Automatic Size",
+    Callback = function(bool)
+        _G.autoSizeActive = bool
+        if bool then
+            task.spawn(function()
+                while _G.autoSizeActive do
+                    rEvents.changeSpeedSizeRemote:InvokeServer("changeSize", sizeValue)
+                    task.wait(0.5)
+                end
+            end)
+        end
+    end
+})
+
+rebirthTab:Toggle({
+    Title = "Hide Frame",
+    Desc = "Fps Becomes More Booster",
+    Callback = function(bool)
+        for _, obj in pairs(ReplicatedStorage:GetChildren()) do
+            if obj.Name:match("Frame$") then
+                obj.Visible = not bool
+            end
+        end
+    end
+})
+
+local Farmingg = rebirthTab:Section({Title = "Farming", Icon = "dumbbell"})
+
+rebirthTab:Toggle({
+    Title = "Auto Eat Egg | 30mins",
+    Desc = "Get 2x Strength | 30 Minute",
+    Callback = function(state)
+        getgenv().AutoEatProtein = state
+        
+        local function activateProteinEgg()
+            local character = game.Players.LocalPlayer.Character
+            if not character then return end
+            
+            local tool = character:FindFirstChild("Protein Egg") or game.Players.LocalPlayer.Backpack:FindFirstChild("Protein Egg")
+            
+            if tool and c and c.muscleEvent then
+                c.muscleEvent:FireServer("proteinEgg", tool)
+            end
+        end
+
+        if state then
+            task.spawn(function()
+                while getgenv().AutoEatProtein do
+                    activateProteinEgg()
+                    task.wait(1800)
+                end
+            end)
+            
+            WindUI:Notify({Title = "Success", Content = "Auto Eat Egg Enabled"})
+        end
+    end
+})
+
+rebirthTab:Toggle({
+    Title = "Auto Weight",
+    Callback = function(bool)
+        _G.FastWeight = bool
+
+        if bool then
+            task.spawn(function()
+                while _G.FastWeight do
+                    local player = game:GetService("Players").LocalPlayer
+                    local char = player.Character
+                    
+                    if char then
+                        local weight = char:FindFirstChild("Weight") or player.Backpack:FindFirstChild("Weight")
+                        
+                        if weight then
+                            if weight:FindFirstChild("repTime") then
+                                weight.repTime.Value = 0
+                            end
+                            
+                            if weight.Parent ~= char then
+                                char.Humanoid:EquipTool(weight)
+                            end
+                        end
+                    end
+                    task.wait(0.5)
+                end
+            end)
+
+            task.spawn(function()
+                while _G.FastWeight do
+                    local player = game:GetService("Players").LocalPlayer
+                    local event = player:FindFirstChild("muscleEvent") or game:GetService("ReplicatedStorage"):FindFirstChild("muscleEvent")
+                    if event then
+                        event:FireServer("rep")
+                    end
+                    task.wait(0.5)
+                end
+            end)
+        else
+            local player = game:GetService("Players").LocalPlayer
+            local weight = (player.Character and player.Character:FindFirstChild("Weight")) or player.Backpack:FindFirstChild("Weight")
+            if weight and weight:FindFirstChild("repTime") then
+                weight.repTime.Value = 1
+            end
+        end
+    end
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local targetCFrame = CFrame.new(-8744.83496, 13.5662804, -5855.75977, -0.705150843, 3.96503417e-08, -0.709057271, -2.71093832e-08, 1, 8.28798292e-08, 0.709057271, 7.76648861e-08, -0.705150843)
+local isTeleporting = false
+local noclipLoop = nil
+
+local function setNoclip(state)
+    if state then
+        noclipLoop = RunService.Stepped:Connect(function()
+            if player.Character then
+                for _, part in pairs(player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        if noclipLoop then
+            noclipLoop:Disconnect()
+            noclipLoop = nil
+        end
+    end
+end
+
+rebirthTab:Toggle({
+    Title = "Teleport To King",
+    Desc = "Recomended Size 1",
+    Default = false,
+    Callback = function(Value)
+        isTeleporting = Value
+        setNoclip(Value)
+        
+        if Value then
+            task.spawn(function()
+                while isTeleporting do
+                    local char = player.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    
+                    if root then
+                        root.CFrame = targetCFrame
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        end
+    end
+})
+
+player.CharacterAdded:Connect(function(char)
+    char:WaitForChild("HumanoidRootPart")
+    task.wait(2)
+    warn("[RESPAWN] Character respawned — continuing automation...")
+
+    if _G.FastWeight then
+        task.spawn(function()
+            while _G.FastWeight do
+                local c = player.Character
+                if c and not c:FindFirstChild("Weight") then
+                    local tool = player.Backpack:FindFirstChild("Weight")
+                    if tool then
+                        c.Humanoid:EquipTool(tool)
+                    end
+                end
+                player.muscleEvent:FireServer("rep")
+                task.wait(0.1)
+            end
+        end)
+    end
+
+    if teleportActive then
+        task.spawn(function()
+            local hrp = char:WaitForChild("HumanoidRootPart")
+            while teleportActive do
+                if (hrp.Position - targetPosition.Position).Magnitude > 5 then
+                    hrp.CFrame = targetPosition
+                end
+                task.wait(0.05)
+            end
+        end)
+    end
+end)
+
+local ultimateOptions = {
+    "+1 Daily Spin", "+1 Pet Slot", "+10 Item Capacity", "+5% Rep Speed",
+    "Demon Damage", "Galaxy Gains", "Golden Rebirth", "Jungle Swift",
+    "Muscle Mind", "x2 Chest Rewards", "Infernal Health", "x2 Quest Rewards"
+}
+
+local autoBuyAll = false
+
+rebirthTab:Toggle({
+    Title = "Upgrade All Ultimates",
+    Desc = "Upgrade All Ultimate features simultaneously",
+    Default = false,
+    Callback = function(state)
+        autoBuyAll = state
+        if state then
+            task.spawn(function()
+                while autoBuyAll do
+                    for _, ultimate in ipairs(ultimateOptions) do
+                        if not autoBuyAll then break end
+                        pcall(function()
+                            game:GetService("ReplicatedStorage").rEvents.ultimatesRemote:InvokeServer("upgradeUltimate", ultimate)
+                        end)
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
+    end
+})
+
+local Teleport1 = rebirthTab:Section({Title = "Teleport To Save Zone", Icon = "map"})
+
+local function safeTeleport(cframe)
+    local character = player.Character or player.CharacterAdded:Wait()
+    local root = character:WaitForChild("HumanoidRootPart", 5)
+    if root then
+        root.CFrame = cframe
+    end
+end
+
+local teleportLocations = {
+    {"Save Zone V1", CFrame.new(-16000, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)},
+    {"Save Zone V2", CFrame.new(-12000, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)},
+    {"Save Zone V3", CFrame.new(-8000, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)},
+    {"Save Zone V4", CFrame.new(-4000, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)},
+    {"Save Zone V5", CFrame.new(0, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)},
+    {"Save Zone V6", CFrame.new(4000, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)},
+    {"Save Zone V7", CFrame.new(8000, 12135.4023, -16847.418, -0.999634326, -1.30947875e-09, 0.0270406175, -1.66118291e-12, 1, 4.83649494e-08, -0.0270406175, 4.83472213e-08, -0.999634326)}
+}
+
+local activeLoops = {}
+
+for _, location in ipairs(teleportLocations) do
+    local locName = location[1]
+    local locCFrame = location[2]
+
+    rebirthTab:Toggle({
+        Title = locName,
+        Desc = "Rebirth Will Always Be Safe",
+        Default = false,
+        Callback = function(Value)
+            activeLoops[locName] = Value
+            if Value then
+                task.spawn(function()
+                    while activeLoops[locName] do
+                        safeTeleport(locCFrame)
+                        task.wait(0.001)
+                    end
+                end)
+            end
+        end
+    })
+end
+
+local lokasiLantai = {
+    {"Object 1", CFrame.new(-16000, 12128, -16847.418)},
+    {"Object 2", CFrame.new(-12000, 12128, -16847.418)},
+    {"Object 3", CFrame.new(-8000, 12128, -16847.418)},
+    {"Object 4", CFrame.new(-4000, 12128, -16847.418)},
+    {"Object 5", CFrame.new(0, 12128, -16847.418)},
+    {"Object 6", CFrame.new(4000, 12128, -16847.418)},
+    {"Object 7", CFrame.new(8000, 12128, -16847.418)}
+}
+
+local function buatLantaiLogo(nama, posisi)
+    local platform = Instance.new("Part")
+    platform.Name = nama
+    platform.Size = Vector3.new(20, 0.2, 20)
+    platform.Anchored = true
+    platform.CanCollide = true
+    platform.Transparency = 1 
+    platform.CastShadow = false
+    platform.CFrame = posisi
+    
+    local logo = Instance.new("Decal")
+    logo.Texture = "rbxassetid://76676105086715" 
+    logo.Face = Enum.NormalId.Top 
+    logo.Parent = platform
+    
+    platform.Parent = workspace
+end
+
+for _, data in ipairs(lokasiLantai) do
+    buatLantaiLogo(data[1], data[2])
+end
+
+local Farmingg = rebirthTab:Section({Title = "Upgrade Ultimate V2", Icon = "sparkles"})
+
+local ultimateSelect = {
+    "+1 Daily Spin", "+1 Pet Slot", "+10 Item Capacity", "+5% Rep Speed",
+    "Demon Damage", "Galaxy Gains", "Golden Rebirth", "Jungle Swift",
+    "Muscle Mind", "x2 Chest Rewards", "Infernal Health", "x2 Quest Rewards"
+}
+
+local autoUltimateToggles = {}
+
+for _, ultimate in ipairs(ultimateSelect) do
+    autoUltimateToggles[ultimate] = false
+    rebirthTab:Toggle({
+        Title = "Upgrade " .. ultimate,
+        Desc = "Only One Upgrade Ultimate",
+        Callback = function(state)
+            autoUltimateToggles[ultimate] = state
+            if state then
+                task.spawn(function()
+                    while autoUltimateToggles[ultimate] do
+                        pcall(function()
+                            ReplicatedStorage.rEvents.ultimatesRemote:InvokeServer("upgradeUltimate", ultimate)
+                        end)
+                        task.wait(1)
+                    end
+                end)
+            end
+        end
+    })
+end
